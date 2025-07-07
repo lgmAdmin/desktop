@@ -179,4 +179,10 @@ class Settings {
   }
 }
 
-module.exports = new Settings();
+const settings = new Settings();
+
+if (!settings.hardwareAcceleration) {
+  app.disableHardwareAcceleration();
+}
+
+module.exports = settings;

@@ -19,7 +19,10 @@ class AbstractWindow {
 
     /** @type {Electron.BrowserWindow} */
     this.window = options.existingWindow || new BrowserWindow(this.getWindowOptions());
+    this.window.webContents.setWindowOpenHandler(this.handleWindowOpen.bind(this));
     this.window.webContents.on('before-input-event', this.handleInput.bind(this));
+    this.window.webContents.on('will-navigate', this.handleWillNavigate.bind(this));
+
     this.applySettings();
 
     if (!options.existingWindow) {
@@ -38,11 +41,6 @@ class AbstractWindow {
       }
       this.window.setBounds(bounds);
     }
-
-    /**
-     * ipcMain object scoped to the window's main frame only.
-     */
-    this.ipc = this.window.webContents.mainFrame.ipc;
 
     this.initialURL = null;
     this.protocol = null;
@@ -179,8 +177,14 @@ class AbstractWindow {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      enableRemoteModule: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webBluetooth: true,
+      experimentalFeatures: true,
+      bluetooth: true,
+      enableBlinkFeatures: 'WebBluetooth',
     };
-
     const preloadName = this.getPreload();
     if (preloadName) {
       options.webPreferences.preload = path.resolve(__dirname, '../../src-preload/', `${preloadName}.js`);
@@ -278,12 +282,7 @@ class AbstractWindow {
 
       // F11 and alt+enter to toggle fullscreen
       if (input.key === 'F11' || (input.key === 'Enter' && input.alt)) {
-        // Don't do preventDefault() for alt+enter as then the renderer won't receive the
-        // event that the alt key was unpressed, which causes the costume editor to get
-        // stuck in duplicating mode.
-        if (input.key === 'F11') {
-          event.preventDefault();
-        }
+        event.preventDefault();
         this.window.setFullScreen(!this.window.isFullScreen());
       }
 
@@ -334,6 +333,9 @@ class AbstractWindow {
    */
   async handlePermissionRequest (permisson, details) {
     // to be overridden
+    if (permisson === 'bluetooth') {
+      return true; // 允许蓝牙权限请求
+    }
     return false;
   }
 

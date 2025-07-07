@@ -9,7 +9,9 @@ class UpdateWindow extends AbstractWindow {
 
     this.window.setTitle(`${translate('update.window-title')} - ${APP_NAME}`);
 
-    this.ipc.on('get-strings', (event) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('get-strings', (event) => {
       event.returnValue = {
         appName: APP_NAME,
         locale: getLocale(),
@@ -17,7 +19,7 @@ class UpdateWindow extends AbstractWindow {
       };
     });
 
-    this.ipc.on('get-info', (event) => {
+    ipc.on('get-info', (event) => {
       event.returnValue = {
         currentVersion,
         latestVersion,
@@ -25,7 +27,7 @@ class UpdateWindow extends AbstractWindow {
       };
     });
 
-    this.ipc.handle('download', () => {
+    ipc.handle('download', () => {
       this.window.destroy();
 
       const params = new URLSearchParams();
@@ -56,7 +58,7 @@ class UpdateWindow extends AbstractWindow {
       ignoreUpdate(latestVersion, until);
     };
 
-    this.ipc.handle('ignore', (event, permanently) => {
+    ipc.handle('ignore', (event, permanently) => {
       this.window.destroy();
       ignore(permanently);
     });

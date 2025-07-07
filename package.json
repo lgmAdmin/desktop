@@ -1,11 +1,11 @@
 {
   "name": "turbowarp-desktop",
-  "description": "Scratch mod with a compiler, dark mode, a bunch of addons, and more.",
-  "version": "1.14.4",
+  "description": "AI Coding Companion for kids.",
+  "version": "0.2.4",
   "license": "GPL-3.0",
   "author": {
     "email": "contact@turbowarp.org",
-    "name": "Thomas Weber"
+    "name": "Shandong ICreate Education Technology Co., Ltd."
   },
   "scripts": {
     "fetch": "node scripts/download-library-files.js && node scripts/download-packager.js && node scripts/prepare-extensions.js",
@@ -16,22 +16,61 @@
     "electron:package:dir": "electron-builder --dir"
   },
   "dependencies": {
-    "semver": "^7.7.2"
+    "@codemirror/autocomplete": "^6.18.6",
+    "@codemirror/lang-python": "^6.1.7",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@microbit/microbit-fs": "^0.10.0",
+    "@microbit/microbit-universal-hex": "^0.2.2",
+    "@monaco-editor/react": "^4.7.0",
+    "@types/noble": "^0.0.44",
+    "@uiw/react-codemirror": "^4.23.10",
+    "apriltag": "^2.0.3",
+    "axios": "^1.9.0",
+    "bleat": "^0.1.9",
+    "bluetooth-hci-socket": "^0.5.1",
+    "bottleneck": "^2.19.5",
+    "codemirror": "5.0",
+    "connect-timeout": "^1.9.0",
+    "cors": "^2.8.5",
+    "dapjs": "^2.3.0",
+    "electron-updater": "^6.6.2",
+    "esm": "^3.2.25",
+    "esptool-js": "^0.4.7",
+    "express": "^4.21.1",
+    "highlight.js": "^11.11.0",
+    "iconv-lite": "^0.6.3",
+    "intel-hex": "^0.2.0",
+    "jsqr": "^1.4.0",
+    "multer": "^1.4.5-lts.1",
+    "noble": "^1.9.1",
+    "node-ble": "^1.11.0",
+    "node-nmap": "^4.0.0",
+    "node-wifi": "^2.0.16",
+    "opencv.js": "^1.2.1",
+    "pako": "^2.1.0",
+    "qrcode": "^1.5.4",
+    "react-highlight.js": "^1.0.7",
+    "semver": "^7.6.3",
+    "serialport": "^12.0.0",
+    "sudo-prompt": "^9.2.1",
+    "systeminformation": "^5.25.11",
+    "usb": "^1.9.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.27.4",
+    "@babel/core": "^7.25.2",
     "@babel/preset-env": "^7.12.16",
     "@babel/preset-react": "^7.13.13",
     "@electron/fuses": "^1.7.0",
-    "@turbowarp/extensions": "github:TurboWarp/extensions#master",
     "adm-zip": "^0.5.16",
+    "async-limiter": "^2.0.0",
     "autoprefixer": "^9.8.8",
-    "babel-loader": "^8.4.1",
+    "babel-loader": "^8.3.0",
     "copy-webpack-plugin": "^6.4.1",
     "cross-env": "^7.0.3",
     "css-loader": "^1.0.1",
-    "electron": "^36.5.0",
-    "electron-builder": "^26.0.12",
+    "electron": "^32.0.2",
+    "electron-builder": "^25.1.8",
     "file-loader": "^6.2.0",
     "postcss": "^8.4.13",
     "postcss-import": "^14.0.0",
@@ -60,7 +99,9 @@
   "main": "./src-main/entrypoint.js",
   "build": {
     "appId": "org.turbowarp.desktop",
-    "productName": "TurboWarp",
+    "productName": "ICreateCode Beta",
+    "nodeVersion": "current",
+    "icon": "build/robotIcon.png",
     "files": [
       "node_modules/**/*",
       "src-main/**/*",
@@ -68,7 +109,14 @@
       "src-renderer/**/*",
       "dist-renderer-webpack/**/*",
       "dist-library-files/**/*",
-      "dist-extensions/**/*"
+      "dist-extensions/**/*",
+      "utils/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "http://localhost:3001/updates/"
+      }
     ],
     "extraResources": [
       {
@@ -78,11 +126,22 @@
       {
         "from": "art/icon.svg",
         "to": "icon.svg"
+      },
+      {
+        "from": "utils/",
+        "to": "utils/"
+      },
+      {
+        "from": "build/robotIcon.png",
+        "to": "build/robotIcon.png"
       }
+    ],
+    "asarUnpack": [
+      "utils/*"
     ],
     "win": {
       "artifactName": "${productName} Portable ${version} ${arch}.${ext}",
-      "icon": "build/icon.ico",
+      "icon": "build/favicon.ico",
       "target": [
         {
           "target": "nsis",
@@ -95,9 +154,9 @@
       ]
     },
     "appx": {
-      "artifactName": "${productName}-MS-Store-${version}-${arch}.${ext}",
-      "applicationId": "TurboWarp",
-      "displayName": "TurboWarp",
+      "artifactName": "${productName} MS Store ${version} ${arch}.${ext}",
+      "applicationId": "ICreateCode Beta",
+      "displayName": "ICreateCode Beta",
       "identityName": "45747ThomasWeber.TurboWarpDesktop",
       "publisher": "CN=18FA7D4F-01BF-49F2-BF56-782DCEA49C69",
       "publisherDisplayName": "Thomas Weber",
@@ -112,13 +171,13 @@
       ]
     },
     "nsis": {
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "artifactName": "${productName} Setup ${version} ${arch}.${ext}",
       "oneClick": false,
       "deleteAppDataOnUninstall": false,
       "allowToChangeInstallationDirectory": true
     },
     "mac": {
-      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "artifactName": "${productName} Setup ${version}.${ext}",
       "icon": "build/icon.icns",
       "category": "public.app-category.education",
       "darkModeSupport": true,
@@ -156,10 +215,8 @@
       "description": "TurboWarp is a Scratch mod with a compiler to run projects faster, dark mode for your eyes, a bunch of addons to improve the editor, and more.",
       "category": "Development",
       "desktop": {
-        "entry": {
-          "StartupWMClass": "turbowarp-desktop",
-          "Keywords": "scratch;"
-        }
+        "StartupWMClass": "turbowarp-desktop",
+        "Keywords": "scratch;"
       },
       "extraFiles": [
         "linux-files"
@@ -182,6 +239,7 @@
       "plugs": [
         "default",
         "camera",
+        "audio-playback",
         "audio-record",
         "joystick",
         "removable-media"

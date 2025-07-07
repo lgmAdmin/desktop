@@ -5,7 +5,7 @@ const settings = require('./settings');
 const MigrateWindow = require('./windows/migrate');
 const {APP_NAME} = require('./brand');
 const {translate} = require('./l10n');
-const openExternal = require('./open-external');
+const safelyOpenExternal = require('./open-external');
 const packageJSON = require('../package.json');
 
 // Avoid running migrate logic on fresh installs when we can. Not required, just helps
@@ -28,7 +28,8 @@ const writeCurrentVersion = async () => {
 };
 
 const openUpdatePage = () => {
-  openExternal('https://desktop.turbowarp.org/');
+  // safelyOpenExternal('https://desktop.turbowarp.org/');
+  // console.log('###########')
 };
 
 /**
@@ -73,13 +74,9 @@ const migrate = async () => {
     // See https://en.wikipedia.org/wiki/Windows_NT#Releases for kernel versions
     (process.platform === 'win32' && getElectronMajorVersion() === 22 && getKernelMajorVersion() >= 10) ||
 
+    // Legacy build for macOS 10.13 and 10.14 uses Electron 26
     // See https://en.wikipedia.org/wiki/Darwin_%28operating_system%29#Release_history for kernel versions
-    (process.platform === 'darwin' && (
-      // Legacy build for macOS 10.13 and 10.14 uses Electron 26
-      (getElectronMajorVersion() === 26 && getKernelMajorVersion() >= 19) ||
-      // Legacy build for macOS 10.15 uses Electron 32
-      (getElectronMajorVersion() === 32 && getKernelMajorVersion() >= 20)
-    ))
+    (process.platform === 'darwin' && getElectronMajorVersion() === 26 && getKernelMajorVersion() >= 19)
   )) {
     const result = dialog.showMessageBoxSync({
       title: APP_NAME,
@@ -118,43 +115,43 @@ const migrate = async () => {
   // Imported lazily as it takes about 10ms to import
   const semverLt = require('semver/functions/lt');
 
-  if (
-    settings.dataVersion > MigrateWindow.LATEST_VERSION ||
-    semverLt(desktopVersion, settings.desktopVersion) ||
-    semverLt(electronVersion, settings.electronVersion)
-  ) {
-    // Something was downgraded. This is not something we officially support.
-    const changes = [];
-    if (settings.dataVersion !== MigrateWindow.LATEST_VERSION) {
-      changes.push(`S ${settings.dataVersion} -> ${MigrateWindow.LATEST_VERSION}`);
-    }
-    if (settings.desktopVersion !== desktopVersion) {
-      changes.push(`D ${settings.desktopVersion} -> ${desktopVersion}`);
-    }
-    if (settings.electronVersion !== electronVersion) {
-      changes.push(`E ${settings.electronVersion} -> ${electronVersion}`);
-    }
+  // if (
+  //   settings.dataVersion > MigrateWindow.LATEST_VERSION ||
+  //   semverLt(desktopVersion, settings.desktopVersion) ||
+  //   semverLt(electronVersion, settings.electronVersion)
+  // ) {
+  //   // Something was downgraded. This is not something we officially support.
+  //   const changes = [];
+  //   if (settings.dataVersion !== MigrateWindow.LATEST_VERSION) {
+  //     changes.push(`S ${settings.dataVersion} -> ${MigrateWindow.LATEST_VERSION}`);
+  //   }
+  //   if (settings.desktopVersion !== desktopVersion) {
+  //     changes.push(`D ${settings.desktopVersion} -> ${desktopVersion}`);
+  //   }
+  //   if (settings.electronVersion !== electronVersion) {
+  //     changes.push(`E ${settings.electronVersion} -> ${electronVersion}`);
+  //   }
 
-    if (dialog.showMessageBoxSync({
-      type: 'error',
-      title: APP_NAME,
-      message: translate('downgrade-warning.title'),
-      detail: translate('downgrade-warning.message')
-        .replace('{APP_NAME}', APP_NAME)
-        .replace('{website}', 'desktop.turbowarp.org')
-        .replace('{debugInfo}', changes.join(', ')),
-      buttons: [
-        translate('downgrade-warning.exit'),
-        translate('downgrade-warning.continue-anyways')
-      ],
-      cancelId: 0,
-      defaultId: 0,
-      noLink: true
-    }) === 0) {
-      openUpdatePage();
-      return false;
-    }
-  }
+  //   if (dialog.showMessageBoxSync({
+  //     type: 'error',
+  //     title: APP_NAME,
+  //     message: translate('downgrade-warning.title'),
+  //     detail: translate('downgrade-warning.message')
+  //       .replace('{APP_NAME}', APP_NAME)
+  //       .replace('{website}', 'desktop.turbowarp.org')
+  //       .replace('{debugInfo}', changes.join(', ')),
+  //     buttons: [
+  //       translate('downgrade-warning.exit'),
+  //       translate('downgrade-warning.continue-anyways')
+  //     ],
+  //     cancelId: 0,
+  //     defaultId: 0,
+  //     noLink: true
+  //   }) === 0) {
+  //     openUpdatePage();
+  //     return false;
+  //   }
+  // }
 
   if (settings.dataVersion < MigrateWindow.LATEST_VERSION) {
     await MigrateWindow.run(writeCurrentVersion);

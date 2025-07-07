@@ -3,7 +3,6 @@ const fsPromises = require('fs/promises');
 const nodeCrypto = require('crypto');
 const pathUtil = require('path');
 const {app} = require('electron');
-const stream = require('stream');
 
 // This file was initially based on:
 // https://github.com/npm/write-file-atomic/blob/a37fdc843f4d391cf1cff85c8e69c3d80e05b049/lib/index.js
@@ -35,8 +34,8 @@ const getOriginalMode = async (path) => {
     const stat = await fsPromises.stat(path);
     return stat.mode;
   } catch (e) {
-    // The project should be readable and writable, but not executable.
-    // Whatever umask the user has set for our process will override this.
+    // TODO: we do this because write-file-atomic did it but that seems kinda not great??
+    // read and write for all users
     return 0o666;
   }
 };
@@ -93,6 +92,23 @@ const sha512 = (file) => new Promise((resolve, reject) => {
 });
 
 /**
+ * @param {string} a Path 1
+ * @param {string} b Path 2
+ * @returns {Promise<boolean>} true if the data in the files is identical
+ */
+const areSameFile = async (a, b) => {
+  try {
+    const [hashA, hashB] = await Promise.all([
+      sha512(a),
+      sha512(b)
+    ]);
+    return hashA === hashB;
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
  * @param {string} from
  * @param {string} to
  * @returns {Promise<void>} Does not wait for file to be synced to disk
@@ -103,17 +119,16 @@ const copy = (from, to) => new Promise((resolve, reject) => {
   // data recovery later.
   const readStream = fs.createReadStream(from);
   const writeStream = fs.createWriteStream(to);
-  stream.pipeline(
-    readStream,
-    writeStream,
-    (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    }
-  );
+  readStream.on('error', (error) => {
+    reject(error);
+  });
+  writeStream.on('error', (error) => {
+    reject(error);
+  });
+  writeStream.on('finish', () => {
+    resolve();
+  });
+  readStream.pipe(writeStream);
 });
 
 const createAtomicWriteStream = async (path) => {
@@ -126,28 +141,16 @@ const createAtomicWriteStream = async (path) => {
   const isSeverelySandboxed = !!process.mas;
 
   const runningHash = nodeCrypto.createHash('sha512');
-  const tempPath = getTemporaryPath(path, isSeverelySandboxed);
 
-  /** @type {fs.promises.FileHandle} */
-  let fileHandle;
-  /** @type {fs.WriteStream} */
-  let writeStream;
-  try {
-    fileHandle = await fsPromises.open(tempPath, 'w', originalMode);
-    writeStream = fileHandle.createWriteStream({
-      autoClose: false,
-      // Increase high water mark from default value of 16384.
-      // Increasing this results in less time spent waiting for disk IO to complete, which would pause
-      // the sb3 generation stream in scratch-gui. Increasing this does increase memory usage.
-      highWaterMark: 1024 * 1024 * 5
-    });
-  } catch (err) {
-    if (fileHandle) {
-      fileHandle.close();
-    }
-    releaseFileLock();
-    throw err;
-  }
+  const tempPath = getTemporaryPath(path, isSeverelySandboxed);
+  const fileHandle = await fsPromises.open(tempPath, 'w', originalMode);
+  const writeStream = fileHandle.createWriteStream({
+    autoClose: false,
+    // Increase high water mark from default value of 16384.
+    // Increasing this results in less time spent waiting for disk IO to complete, which would pause
+    // the sb3 generation stream in scratch-gui. Increasing this does increase memory usage.
+    highWaterMark: 1024 * 1024 * 5
+  });
 
   const handleError = async (error) => {
     await new Promise((resolve) => {
@@ -188,16 +191,10 @@ const createAtomicWriteStream = async (path) => {
         });
       });
 
-      const expectedHash = runningHash.digest('hex');
       try {
         await fsPromises.rename(tempPath, path);
-
-        const finalHash = await sha512(path);
-        if (expectedHash !== finalHash) {
-          throw new Error('Atomc write stream integrity check failed');
-        }
       } catch (err) {
-        if (err.syscall === 'rename' && err.code === 'EXDEV') {
+        if (err.code === 'EXDEV') {
           // The temporary file and the destination file were located on separate
           // drives or partitions, so we need to copy instead. This is not ideal
           // and is not atomic, but:
@@ -214,40 +211,27 @@ const createAtomicWriteStream = async (path) => {
           await destinationHandle.sync();
           await destinationHandle.close();
 
-          const finalHash = await sha512(path);
-          if (expectedHash !== finalHash) {
-            throw new Error('Atomc write stream integrity check failed in EXDEV fallback');
-          }
-
           await fsPromises.unlink(tempPath);
-        } else if (process.platform === 'win32' && err.syscall === 'rename' && err.code === 'EPERM') {
-          // On Windows, the rename can fail with EPERM even though it succeeded according to
+        } else if (
+          // On Windows, the rename can fail with EPERM even though it succeeded.
           // https://github.com/npm/fs-write-stream-atomic/commit/2f51136f24aaefebd446455a45fa108909b18ca9
-
-          let finalHash;
-          try {
-            finalHash = await sha512(path);
-          } catch (sha512Error) {
-            // If the rename actually failed, the SHA-512 will throw an ENOENT.
-            // Re-throw the rename error since that is the original error and will be more meaningful.
-            throw err;
-          }
-
-          if (expectedHash !== finalHash) {
-            // Rename actually failed. Probably the destination file is busy. Throw the original error.
-            throw err;
-          }
-
-          // Otherwise, the rename actually copied the data over, so just try to remove the temporary
-          // file if it still exists.
-          try {
-            await fsPromises.unlink(tempPath);
-          } catch (unlinkError) {
-            // ignore
-          }
+          process.platform === 'win32' &&
+          err.syscall === 'rename' &&
+          err.code === 'EPERM' &&
+          await areSameFile(path, tempPath)
+        ) {
+          // The rename did actually succeed, so we can remove the temporary file
+          await fsPromises.unlink(tempPath);
         } else {
           throw err;
         }
+      }
+
+      // One final check to make sure nothing went wrong
+      const expectedHash = runningHash.digest('hex');
+      const finalHash = await sha512(path);
+      if (expectedHash !== finalHash) {
+        throw new Error('Final integrity hash check failed');
       }
 
       writeStream.emit('atomic-finish');

@@ -1,11 +1,7 @@
 import React from 'react';
 import {connect} from 'react-redux';
 import PropTypes from 'prop-types';
-import {
-  openLoadingProject,
-  closeLoadingProject,
-  openInvalidProjectModal
-} from 'scratch-gui/src/reducers/modals';
+import {openLoadingProject, closeLoadingProject} from 'scratch-gui/src/reducers/modals';
 import {
   requestProjectUpload,
   setProjectId,
@@ -14,13 +10,10 @@ import {
   onLoadedProject,
   requestNewProject
 } from 'scratch-gui/src/reducers/project-state';
-import {
-  setFileHandle,
-  setUsername,
-  setProjectError
-} from 'scratch-gui/src/reducers/tw';
+import {setFileHandle, setUsername} from 'scratch-gui/src/reducers/tw';
 import {WrappedFileHandle} from './filesystem-api.js';
 import {setStrings} from '../prompt/prompt.js';
+import codeModule from '../../../utils/global.js'
 
 let mountedOnce = false;
 
@@ -57,6 +50,77 @@ const handleClickPrivacy = () => {
 const handleClickAbout = () => {
   EditorPreload.openAbout();
 };
+
+// const handleClickMaster = () =>{
+//   alert('主控器')
+// }
+const handleDownload = () =>{
+  codeModule.getCode()
+  EditorPreload.download(codeModule.getCode());
+}
+
+const handleSerialDownload = (place) =>{
+  console.log(place)
+  let data={
+    place:place,
+    code:codeModule.getCode()
+  }
+  EditorPreload.SerialDownload(data)
+}
+const handleSaveCode = (args) =>{
+  console.log(args)
+  // alert('保存代码')
+  let blob = new Blob([codeModule.getCode()], { type: 'text/plain' }); // 创建一个Blob对象，指定内容类型为纯文本
+  let fileDownloadUrl = URL.createObjectURL(blob); // 为Blob对象创建一个临时URL
+
+  const name = 'project';
+  // 创建一个临时的<a>标签用于下载
+  let downloadLink = document.createElement('a');
+  downloadLink.href = fileDownloadUrl;
+  args.forEach((element,index) => {
+    if(element && index==0){
+      downloadLink.download = name+'.lua'; // 指定下载文件的名称
+    }else if(element && index==1){
+      downloadLink.download = name+'.py'; // 指定下载文件的名称
+    }
+  });
+  
+
+  document.body.appendChild(downloadLink); // 将<a>标签加入到文档中
+  downloadLink.click(); // 模拟点击<a>标签以触发下载
+
+  document.body.removeChild(downloadLink); // 移除<a>标签
+  URL.revokeObjectURL(fileDownloadUrl); // 释放创建的临时URL资源
+}
+
+const handleLoadCode = () =>{
+  // alert('导入代码')
+  const input =document.createElement('input')
+  input.type='file'
+  input.id='fileInput'
+  input.style='display:none'
+
+  input.click()
+  input.addEventListener('change',(event)=>{
+    const file = event.target.files[0];  // 获取选中的文件
+    if (!file) return;
+
+    const reader = new FileReader();  // 创建 FileReader 实例
+
+    // 读取完成后，将内容显示到文本框
+    reader.onload = (e) => {
+        // console.log(e.target.result);
+        codeModule.setCode(e.target.result)
+        input.remove()
+    };
+
+    // 读取文件内容（纯文本）
+    reader.readAsText(file);
+  })
+}
+const handleCancelload = () =>{
+  EditorPreload.cancelload()
+}
 
 const handleClickSourceCode = () => {
   window.open('https://github.com/TurboWarp');
@@ -148,8 +212,8 @@ const DesktopHOC = function (WrappedComponent) {
         }
       })().catch(error => {
         console.error(error);
+        alert(error);
 
-        this.props.onShowErrorModal(error);
         this.props.onLoadingCompleted();
         this.props.onLoadedProject(this.props.loadingState, false);
         this.props.onHasInitialProject(false, this.props.loadingState);
@@ -201,7 +265,6 @@ const DesktopHOC = function (WrappedComponent) {
         onRequestNewProject,
         onSetFileHandle,
         onSetReduxUsername,
-        onShowErrorModal,
         vm,
         ...props
       } = this.props;
@@ -212,6 +275,7 @@ const DesktopHOC = function (WrappedComponent) {
           onClickAddonSettings={handleClickAddonSettings}
           onClickNewWindow={handleClickNewWindow}
           onClickPackager={handleClickPackager}
+          // onClickMaster={handleClickMaster}
           onClickAbout={[
             {
               title: this.messages['in-app-about.desktop-settings'],
@@ -238,6 +302,12 @@ const DesktopHOC = function (WrappedComponent) {
             ])
           ]}
           onClickDesktopSettings={handleClickDesktopSettings}
+          // clickSerialConnect={handleClickDesktopSettings}
+          download={handleDownload}
+          SerialDownload={handleSerialDownload}
+          saveCode={handleSaveCode}
+          loadCode={handleLoadCode}
+          cancelload={handleCancelload}
           securityManager={securityManager}
           {...props}
         />
@@ -250,7 +320,7 @@ const DesktopHOC = function (WrappedComponent) {
     loadingState: PropTypes.string.isRequired,
     projectChanged: PropTypes.bool.isRequired,
     fileHandle: PropTypes.shape({
-      id: PropTypes.string.isRequired
+      id: PropTypes.number.isRequired
     }),
     isFullScreen: PropTypes.bool.isRequired,
     reduxUsername: PropTypes.string.isRequired,
@@ -262,7 +332,6 @@ const DesktopHOC = function (WrappedComponent) {
     onRequestNewProject: PropTypes.func.isRequired,
     onSetFileHandle: PropTypes.func.isRequired,
     onSetReduxUsername: PropTypes.func.isRequired,
-    onShowErrorModal: PropTypes.func.isRequired,
     vm: PropTypes.shape({
       loadProject: PropTypes.func.isRequired
     }).isRequired
@@ -293,11 +362,7 @@ const DesktopHOC = function (WrappedComponent) {
     },
     onRequestNewProject: () => dispatch(requestNewProject(false)),
     onSetFileHandle: fileHandle => dispatch(setFileHandle(fileHandle)),
-    onSetReduxUsername: username => dispatch(setUsername(username)),
-    onShowErrorModal: error => {
-      dispatch(setProjectError(error));
-      dispatch(openInvalidProjectModal());
-    }
+    onSetReduxUsername: (username) => dispatch(setUsername(username))
   });
 
   return connect(

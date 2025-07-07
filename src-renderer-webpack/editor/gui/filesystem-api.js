@@ -23,12 +23,12 @@ const toUnit8Array = (contents) => {
 
 class WrappedFileWritable {
   /**
-   * @param {string} id File ID from main
+   * @param {number} id File ID from main
    */
   constructor (id) {
     this._channel = new MessageChannel();
 
-    /** @type {Map<string, {resolve: () => void, reject: (error: unknown) => void}>} */
+    /** @type {Map<number, {resolve: () => void, reject: (error: unknown) => void}>} */
     this._callbacks = new Map();
     this._lastMessageId = 1;
 
@@ -106,7 +106,7 @@ class WrappedFileWritable {
 
 class WrappedFileHandle {
   /**
-   * @param {string} id File ID from main.
+   * @param {number} id File ID from main.
    * @param {string} name Name including file extension.
    */
   constructor (id, name) {

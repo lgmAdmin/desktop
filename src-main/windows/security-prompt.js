@@ -75,7 +75,9 @@ class SecurityPromptWindow extends AbstractWindow {
       this.promptResolve = resolve;
     });
 
-    this.ipc.on('init', (event) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('init', (event) => {
       event.returnValue = {
         type,
         APP_NAME,
@@ -84,7 +86,7 @@ class SecurityPromptWindow extends AbstractWindow {
       };
     });
 
-    this.ipc.handle('ready', (event, options) => {
+    ipc.handle('ready', (event, options) => {
       const contentHeight = +options.height;
 
       const [minWidth, minHeight] = this.window.getMinimumSize();
@@ -96,7 +98,7 @@ class SecurityPromptWindow extends AbstractWindow {
       this.show();
     });
 
-    this.ipc.handle('done', (event, allowed) => {
+    ipc.handle('done', (event, allowed) => {
       this.promptResolve(!!allowed);
 
       // destroy() won't run the close event

@@ -86,7 +86,13 @@ module.exports = [
                     {
                         context: 'src-renderer-webpack/editor/gui/',
                         from: '*.html'
-                    }
+                    },
+                    { from: path.resolve(__dirname, 'src-static-resourse/assets'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor/assets') },
+                    { from: path.resolve(__dirname, 'src-static-resourse/img'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor/img') },
+                    { from: path.resolve(__dirname, 'src-static-resourse/js'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor/js') },
+                    { from: path.resolve(__dirname, 'src-static-resourse/static'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor/static') },
+                    { from: path.resolve(__dirname, 'src-static-resourse/haarcascade_frontalface_default.js'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor') },
+                    { from: path.resolve(__dirname, 'src-static-resourse/haarcascade_frontalface_default.js.map'), to: path.resolve(__dirname, 'dist-renderer-webpack/editor') }
                 ]
             })
         ],

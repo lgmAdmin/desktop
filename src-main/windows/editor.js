@@ -1,12 +1,17 @@
 const fsPromises = require('fs/promises');
 const path = require('path');
 const nodeURL = require('url');
-const zlib = require('zlib');
-const nodeCrypto = require('crypto');
 const {app, dialog} = require('electron');
 const ProjectRunningWindow = require('./project-running-window');
 const AddonsWindow = require('./addons');
 const DesktopSettingsWindow = require('./desktop-settings');
+const SerialConnectWindow= require('./serial-connect');
+const BleConnectWindow = require('./ble-connect')
+const EspSendWindow = require('./esp-send');
+const SendWifiWindow = require('./send-wifi')
+const MasterWindow = require('./master.js')
+const ConnectWindow=require('./connect-device.js')
+const DownloadCodeWindow = require('./download-code');
 const PrivacyWindow = require('./privacy');
 const AboutWindow = require('./about');
 const PackagerWindow = require('./packager');
@@ -18,7 +23,12 @@ const settings = require('../settings');
 const privilegedFetch = require('../fetch');
 const RichPresence = require('../rich-presence.js');
 const FileAccessWindow = require('./file-access-window.js');
-const ExtensionDocumentationWindow = require('./extension-documentation.js');
+const {shell} = require('electron');
+const {getWin,setWin} = require('../../utils/win.js')
+const {getCode,setCode,getDown,setDown} = require('../../utils/tempCode.js')
+const {getPort} =require('../../utils/port')
+const extensions = require('../../utils/extensionWho.js')
+
 
 const TYPE_FILE = 'file';
 const TYPE_URL = 'url';
@@ -67,25 +77,11 @@ class OpenedFile {
 
     if (this.type === TYPE_SAMPLE) {
       const sampleRoot = path.resolve(__dirname, '../../dist-extensions/samples/');
-      const resolvedPath = path.join(sampleRoot, this.path);
-      if (resolvedPath.startsWith(sampleRoot)) {
-        const compressedPath = `${resolvedPath}.br`;
-        const compressedData = await fsPromises.readFile(compressedPath);
-
-        // dist-extensions is all brotli'd; must decompress
-        const decompressedData = await new Promise((resolve, reject) => {
-          zlib.brotliDecompress(compressedData, (err, res) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(res);
-            }
-          });
-        });
-
+      const joined = path.join(sampleRoot, this.path);
+      if (joined.startsWith(sampleRoot)) {
         return {
           name: this.path,
-          data: decompressedData
+          data: await fsPromises.readFile(joined)
         };
       }
       throw new Error('Unsafe join');
@@ -203,51 +199,41 @@ const isChildPath = (parent, child) => {
   return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 };
 
-/**
- * @returns {string} A unique string.
- */
-const generateFileId = () => {
-  // Note that we can't use the randomUUID from web crypto as we need to support Electron 22.
-  return `desktop_file_id{${nodeCrypto.randomUUID()}}`;
-};
-
 class EditorWindow extends ProjectRunningWindow {
   /**
-   * @param {OpenedFile|null} initialFile
+   * @param {OpenedFile|null} file
    * @param {boolean} isInitiallyFullscreen
    */
-  constructor (initialFile, isInitiallyFullscreen) {
+  constructor (file, isInitiallyFullscreen) {
     super();
 
-    /**
-     * Ideally we would revoke access after loading a new project, but our file handle handling in
-     * the GUI isn't robust enough for that yet. We do at least use random file handle IDs which
-     * makes it much harder for malicious code in the renderer process to enumerate all previously
-     * opened IDs and overwrite them.
-     * @type {Map<string, OpenedFile>}
-     */
-    this.openedFiles = new Map();
-    this.activeFileId = null;
+    // This file ID system is not quite perfect. Ideally we would completely revoke permission to access
+    // old projects after you load the next one, but our handling of file handles in scratch-gui is
+    // pretty bad right now, so this is the best compromise.
+    this.openedFiles = [];
+    this.activeFileIndex = -1;
 
-    if (initialFile !== null) {
-      this.activeFileId = generateFileId();
-      this.openedFiles.set(this.activeFileId, initialFile);
+    if (file !== null) {
+      this.openedFiles.push(file);
+      this.activeFileIndex = 0;
     }
 
     this.openedProjectAt = Date.now();
 
-    /**
-     * @param {string} id
-     * @returns {OpenedFile}
-     * @throws if invalid ID
-     */
-    const getFileById = (id) => {
-      if (!this.openedFiles.has(id)) {
+    const getFileByIndex = (index) => {
+      if (typeof index !== 'number') {
+        throw new Error('File ID not number');
+      }
+      const value = this.openedFiles[index];
+      if (!(value instanceof OpenedFile)) {
         throw new Error('Invalid file ID');
       }
-      return this.openedFiles.get(id);
+      return this.openedFiles[index];
     };
 
+    //禁止节流
+    this.window.webContents.setBackgroundThrottling(false);
+    
     this.window.webContents.on('will-prevent-unload', (event) => {
       const choice = dialog.showMessageBoxSync(this.window, {
         title: APP_NAME,
@@ -285,16 +271,21 @@ class EditorWindow extends ProjectRunningWindow {
       this.updateRichPresence();
     });
 
-    this.ipc.on('is-initially-fullscreen', (e) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('is-initially-fullscreen', (e) => {
       e.returnValue = isInitiallyFullscreen;
     });
 
-    this.ipc.handle('get-initial-file', () => {
-      return this.activeFileId;
+    ipc.handle('get-initial-file', () => {
+      if (this.activeFileIndex === -1) {
+        return null;
+      }
+      return this.activeFileIndex;
     });
 
-    this.ipc.handle('get-file', async (event, id) => {
-      const file = getFileById(id);
+    ipc.handle('get-file', async (event, index) => {
+      const file = getFileByIndex(index);
       const {name, data} = await file.read();
       return {
         name,
@@ -303,7 +294,7 @@ class EditorWindow extends ProjectRunningWindow {
       };
     });
 
-    this.ipc.on('set-locale', async (event, locale) => {
+    ipc.on('set-locale', async (event, locale) => {
       if (settings.locale !== locale) {
         settings.locale = locale;
         updateLocale(locale);
@@ -321,26 +312,26 @@ class EditorWindow extends ProjectRunningWindow {
       };
     });
 
-    this.ipc.handle('set-changed', (event, changed) => {
+    ipc.handle('set-changed', (event, changed) => {
       this.window.setDocumentEdited(changed);
     });
 
-    this.ipc.handle('opened-file', (event, id) => {
-      const file = getFileById(id);
+    ipc.handle('opened-file', (event, index) => {
+      const file = getFileByIndex(index);
       if (file.type !== TYPE_FILE) {
         throw new Error('Not a file');
       }
-      this.activeFileId = id;
+      this.activeFileIndex = index;
       this.openedProjectAt = Date.now();
       this.window.setRepresentedFilename(file.path);
     });
 
-    this.ipc.handle('closed-file', () => {
-      this.activeFileId = null;
+    ipc.handle('closed-file', () => {
+      this.activeFileIndex = -1;
       this.window.setRepresentedFilename('');
     });
 
-    this.ipc.handle('show-open-file-picker', async () => {
+    ipc.handle('show-open-file-picker', async () => {
       const result = await dialog.showOpenDialog(this.window, {
         properties: ['openFile'],
         defaultPath: settings.lastDirectory,
@@ -355,20 +346,18 @@ class EditorWindow extends ProjectRunningWindow {
         return null;
       }
 
-      const filePath = result.filePaths[0];
-      settings.lastDirectory = path.dirname(filePath);
+      const file = result.filePaths[0];
+      settings.lastDirectory = path.dirname(file);
       await settings.save();
 
-      const id = generateFileId();
-      this.openedFiles.set(id, new OpenedFile(TYPE_FILE, filePath));
-
+      this.openedFiles.push(new OpenedFile(TYPE_FILE, file));
       return {
-        id,
-        name: path.basename(filePath)
+        id: this.openedFiles.length - 1,
+        name: path.basename(file)
       };
     });
 
-    this.ipc.handle('show-save-file-picker', async (event, suggestedName) => {
+    ipc.handle('show-save-file-picker', async (event, suggestedName) => {
       const result = await dialog.showSaveDialog(this.window, {
         defaultPath: path.join(settings.lastDirectory, suggestedName),
         filters: [
@@ -382,44 +371,42 @@ class EditorWindow extends ProjectRunningWindow {
         return null;
       }
 
-      const filePath = result.filePath;
+      const file = result.filePath;
 
-      const unsafePath = getUnsafePaths().find(i => isChildPath(i.path, filePath));
+      const unsafePath = getUnsafePaths().find(i => isChildPath(i.path, file));
       if (unsafePath) {
-        // No need to block until the message box is closed
+        // No need to wait for the message box to close
         dialog.showMessageBox(this.window, {
           type: 'error',
           title: APP_NAME,
           message: translate('unsafe-path.title'),
           detail: translate(`unsafe-path.details`)
             .replace('{APP_NAME}', unsafePath.app)
-            .replace('{file}', filePath),
+            .replace('{file}', file),
           noLink: true
         });  
         return null;
       }
 
-      settings.lastDirectory = path.dirname(filePath);
+      settings.lastDirectory = path.dirname(file);
       await settings.save();
 
-      const id = generateFileId();
-      this.openedFiles.set(id, new OpenedFile(TYPE_FILE, filePath));
-
+      this.openedFiles.push(new OpenedFile(TYPE_FILE, file));
       return {
-        id,
-        name: path.basename(filePath)
+        id: this.openedFiles.length - 1,
+        name: path.basename(file)
       };
     });
 
-    this.ipc.handle('get-preferred-media-devices', () => {
+    ipc.handle('get-preferred-media-devices', () => {
       return {
         microphone: settings.microphone,
         camera: settings.camera
       };
     });
 
-    this.ipc.on('start-write-stream', async (startEvent, id) => {
-      const file = getFileById(id);
+    ipc.on('start-write-stream', async (startEvent, index) => {
+      const file = getFileByIndex(index);
       if (file.type !== TYPE_FILE) {
         throw new Error('Not a file');
       }
@@ -491,39 +478,175 @@ class EditorWindow extends ProjectRunningWindow {
       port.start();
     });
 
-    this.ipc.on('alert', (event, message) => {
+    ipc.on('alert', (event, message) => {
       event.returnValue = prompts.alert(this.window, message);
     });
 
-    this.ipc.on('confirm', (event, message) => {
+    ipc.on('confirm', (event, message) => {
       event.returnValue = prompts.confirm(this.window, message);
     });
 
-    this.ipc.handle('open-packager', () => {
+    ipc.handle('open-packager', () => {
       PackagerWindow.forEditor(this);
     });
 
-    this.ipc.handle('open-new-window', () => {
+    ipc.handle('open-new-window', () => {
       EditorWindow.newWindow();
     });
 
-    this.ipc.handle('open-addon-settings', (event, search) => {
+    ipc.handle('open-addon-settings', (event, search) => {
       AddonsWindow.show(search);
     });
 
-    this.ipc.handle('open-desktop-settings', () => {
+    ipc.handle('open-desktop-settings', () => {
       DesktopSettingsWindow.show();
     });
 
-    this.ipc.handle('open-privacy', () => {
+    ipc.handle('open-serial-settings', () => {
+      SerialConnectWindow.show();
+    });
+    ipc.handle('download', (event,code) => {
+      console.log('--------------')
+      console.log(code)
+      setCode(code)
+      setDown(1)
+
+    });
+    let PORT=getPort()
+     // 发送数据并等待接收特定数据后再继续
+     async function sendDataAndWait(dataToSend) {
+      return new Promise(async (resolve, reject) => {
+        // 发送数据
+        await PORT.write(dataToSend, (err) => {
+          if (err) {
+            return reject('Error on write: ' + err.message);
+          }
+
+          console.log(`Data sent: ${dataToSend}`);
+        });
+
+        // 等待接收到的数据
+        // await PORT.on('data', (data) => {
+        //   console.log('Data received:', data.toString());
+        //   console.log(typeof(data.toString()))
+
+        //   // 检查是否是我们想要的响应（例如，'0'）
+        //   if (data.toString().includes('71')) {
+        //     console.log('Received 71, continuing...');
+        //     PORT.removeListener('data');
+        //     resolve(); // 继续执行
+        //   }
+        // });
+        const onDataReceived = (data) => {
+          console.log('Data received:', data.toString());
+          console.log(typeof (data.toString()));
+        
+          // 检查是否是我们想要的响应（例如，'0'）
+          if(data.toString().includes('74')){
+            console.log('Received 74, completed');
+            PORT.removeListener('data', onDataReceived); // 使用 removeListener 停止监听
+            resolve(); // 继续执行
+          }else if (data.toString().includes('71')) {
+            console.log('Received 71, continuing...');
+            PORT.removeListener('data', onDataReceived); // 使用 removeListener 停止监听
+            resolve(); // 继续执行
+          }
+        };
+        
+        PORT.on('data', onDataReceived); // 添加 data 事件的监听器
+
+        // 可选：添加一个超时机制，防止长时间等待
+        setTimeout(() => {
+          reject('Timeout: No response received in time.');
+        }, 5000); // 5秒超时
+      });
+    }
+    ipc.handle('serial-download', async(event,code) => {
+      console.log(extensions.getExtension())
+      PORT=getPort()
+      console.log(PORT)
+      if(extensions.getExtension()==1){
+        console.log('#########################################')
+        sendDataAndWait('Lua:').then(() => {
+          sendDataAndWait(code.code).then(() => {
+            sendDataAndWait('endLua')
+          })
+        })
+
+      }else if(extensions.getExtension()==2){
+        let downloadCode=code.code
+        if (!downloadCode.includes('while')) {
+            // 2. 如果没有 'while' 循环，拼接一个
+            downloadCode += '\nwhile True:\n    pass\n';
+        }
+        // downloadCode+='\n'
+
+        let jsonData={
+          "command": "upload_script",
+          "params": 
+              {
+                  "name": `${code.place}.py`,            // 字符串：1-5.py
+                  "script":downloadCode,            //字符串：程序内容 
+              }
+        }
+        let str=JSON.stringify(jsonData)
+        str+='\n'
+        console.log(str)
+
+        await PORT.write(str, (err) => {
+          if (err) {
+            return reject('Error on write: ' + err.message);
+          }
+
+          console.log(`Data sent: ${str}`);
+        });
+      }
+      
+      
+    });
+    ipc.handle('cancelload', () => {
+      setDown(2)
+
+    });
+    ipc.handle('open-ble-settings', () => {
+      if(getWin()){
+        getWin().show()
+      }else{
+        BleConnectWindow.show();
+      }
+      
+      
+    });
+    ipc.handle('open-esp-settings', (event,espTool) => {
+      EspSendWindow.show(espTool);
+      
+    });
+    ipc.handle('open-wifi-settings', () => {
+      SendWifiWindow.show();
+      
+    });
+    ipc.handle('open-master-window', () => {
+      MasterWindow.show();
+      
+    });
+    ipc.handle('open-connect-window', () => {
+      // console.log('#######################')
+      ConnectWindow.show();
+      
+    });
+    ipc.handle('open-download-settings', (event,code) => {
+      DownloadCodeWindow.show(code);
+    });
+
+    ipc.handle('open-privacy', () => {
       PrivacyWindow.show();
     });
 
-    this.ipc.handle('open-about', () => {
+    ipc.handle('open-about', () => {
       AboutWindow.show();
     });
 
-    this.ipc.handle('get-advanced-customizations', async () => {
+    ipc.handle('get-advanced-customizations', async () => {
       const USERSCRIPT_PATH = path.join(app.getPath('userData'), 'userscript.js');
       const USERSTYLE_PATH = path.join(app.getPath('userData'), 'userstyle.css');
 
@@ -538,7 +661,7 @@ class EditorWindow extends ProjectRunningWindow {
       };
     });
 
-    this.ipc.handle('check-drag-and-drop-path', (event, filePath) => {
+    ipc.handle('check-drag-and-drop-path', (event, filePath) => {
       FileAccessWindow.check(filePath);
     });
 
@@ -548,7 +671,7 @@ class EditorWindow extends ProjectRunningWindow {
      */
     this.isInEditorFullScreen = false;
 
-    this.ipc.handle('set-is-full-screen', (event, isFullScreen) => {
+    ipc.handle('set-is-full-screen', (event, isFullScreen) => {
       this.isInEditorFullScreen = !!isFullScreen;
     });
 
@@ -578,7 +701,7 @@ class EditorWindow extends ProjectRunningWindow {
   enumerateMediaDevices () {
     // Used by desktop settings
     return new Promise((resolve, reject) => {
-      this.ipc.once('enumerated-media-devices', (event, result) => {
+      this.window.webContents.ipc.once('enumerated-media-devices', (event, result) => {
         if (typeof result.error !== 'undefined') {
           reject(result.error);
         } else {
@@ -590,36 +713,13 @@ class EditorWindow extends ProjectRunningWindow {
   }
 
   handleWindowOpen (details) {
-    const url = new URL(details.url);
-    const params = new URLSearchParams(url.search);
-
     // Open extension sample projects in-app
-    if (
-      url.protocol === 'tw-editor:' &&
-      url.host === '.' &&
-      params.has('project_url')
-    ) {
-      const projectUrl = params.get('project_url');
-      const parsedFile = parseOpenedFile(projectUrl, null);
-      if (parsedFile.type === TYPE_SAMPLE) {
-        new EditorWindow(parsedFile, null);
-        return {
-          action: 'deny'
-        };
-      }
-    }
-
-    // Open extension documentation in-app
-    const extensionsDocsMatch = details.url.match(
-      /^https:\/\/extensions\.turbowarp\.org\/([\w_\-.\/]+)$/
+    const match = details.url.match(
+      /^tw-editor:\/\/\.\/gui\/editor\?project_url=(https:\/\/extensions\.turbowarp\.org\/samples\/.+\.sb3)$/
     );
-    if (extensionsDocsMatch) {
-      ExtensionDocumentationWindow.open(extensionsDocsMatch[1]);
-      return {
-        action: 'deny'
-      };
+    if (match) {
+      EditorWindow.openFiles([match[1]], false, '');
     }
-
     return super.handleWindowOpen(details);
   }
 

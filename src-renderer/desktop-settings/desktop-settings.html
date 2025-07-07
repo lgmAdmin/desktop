@@ -2,6 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
     <style>
       body {
         margin: 0;
@@ -55,6 +56,7 @@
   <body>
     <main>
       <script>
+        
         const {locale, strings} = DesktopSettingsPreload.getStrings();
         document.documentElement.lang = locale;
 
@@ -227,7 +229,7 @@
         hardwareAcceleration.checked = settings.hardwareAcceleration;
         hardwareAccelerationWarning.hidden = hardwareAcceleration.checked;
 
-        document.querySelector('.hardware-acceleration-label').textContent = strings['desktop-settings.hardware-acceleration-when-available'];
+        document.querySelector('.hardware-acceleration-label').textContent = strings['desktop-settings.hardware-acceleration'];
         hardwareAccelerationWarning.textContent = strings['desktop-settings.hardware-acceleration-disabled'];
       </script>
 

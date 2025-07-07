@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wi-Fi 二维码生成</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            width: 320px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #ff4c4c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: #e04343;
+        }
+
+        .qr-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .qr-container img {
+            width: 300px;
+            height: 300px;
+            border: 4px solid #ff4c4c;
+            padding: 8px;
+            background: white;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="container">
+        <h2>Wi-Fi 二维码生成</h2>
+        <input type="text" placeholder="请输入热点名称" id="name">
+        <input type="password" placeholder="请输入热点密码" id="password">
+        <button id="submit">生成二维码</button>
+        <button id="submit-usb-card">开启热点并生成二维码（确保连接无线网卡）</button>
+
+        <div class="qr-container" id="qrContainer">
+            <p>请扫描二维码连接 Wi-Fi(确保电脑热点开启)</p>
+            <img id="info" src="" alt="Wi-Fi 二维码">
+        </div>
+    </div>
+
+    <script>
+
+
+        function showToast(message, duration = 3000) {
+            // 如果 toast 容器不存在，则创建一个
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                Object.assign(container.style, {
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                });
+                document.body.appendChild(container);
+            }
+        
+            // 创建 toast 元素
+            const toast = document.createElement('div');
+            toast.textContent = message;
+        
+            // 样式设置
+            Object.assign(toast.style, {
+                background: '#333',
+                color: '#fff',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                opacity: '0',
+                transform: 'translateY(-20px)',
+                transition: 'opacity 0.3s ease, transform 0.3s ease',
+                maxWidth: '300px'
+            });
+        
+            // 添加 toast 到容器
+            container.appendChild(toast);
+        
+            // 强制触发重绘以启用动画
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            });
+        
+            // 3秒后移除
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    toast.remove();
+                    // 若容器内无子元素则移除容器
+                    if (container.children.length === 0) {
+                        container.remove();
+                    }
+                }, 300); // 等动画结束
+            }, duration);
+        }
+        // 自动滚动到底部函数
+        function scrollToBottom() {
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        document.getElementById('name').value=window.espSend.getHistory().name
+        document.getElementById('password').value=window.espSend.getHistory().pass
+        document.getElementById('submit').addEventListener('click', async () => {
+            const name = document.getElementById('name').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (!name || !password) {
+                // alert("请填写完整 Wi-Fi 信息！");
+                showToast('请填写完整 Wi-Fi 信息！')
+                document.getElementById('container').focus(); // 强制聚焦
+                return;
+            }
+            await espSend.setHistory({ name, password })
+           
+
+            let info = await espSend.wifiInfo({ name, password });
+
+            const qrContainer = document.getElementById('qrContainer');
+            const img = document.getElementById('info');
+
+            img.src = info;
+            qrContainer.style.display = "block"; // 显示二维码
+            scrollToBottom()
+        });
+
+        document.getElementById('submit-usb-card').addEventListener('click', async () => {
+            const name = document.getElementById('name').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (!name || !password) {
+                // alert("请填写完整 Wi-Fi 信息！");
+                showToast('请填写完整 Wi-Fi 信息！')
+                document.getElementById('container').focus(); // 强制聚焦
+                return;
+            }
+
+            if(name.length<8){
+                 showToast('热点名称至少8位！')
+                document.getElementById('container').focus(); // 强制聚焦
+                return;
+            }
+            await espSend.setHistory({ name, password })
+           
+
+            let info = await espSend.usbWifiInfo({ name, password });
+
+            const qrContainer = document.getElementById('qrContainer');
+            const img = document.getElementById('info');
+
+            img.src = info;
+            qrContainer.style.display = "block"; // 显示二维码
+        });
+    </script>
+</body>
+</html>

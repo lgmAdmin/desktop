@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    <title>设备连接</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        main {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #ff4c4c;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+        }
+        .button-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        button {
+            background: #ff4c4c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #e63939;
+            transform: translateY(-2px);
+        }
+        button:active {
+            background: #c62828;
+            transform: translateY(1px);
+        }
+        .warning {
+            background-color: yellow;
+            color: black;
+            border: 1px solid black;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 15px;
+        }
+        [hidden] {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <main>
+        <h1>设备端口连接</h1>
+        <p>请选择要连接的设备端口：</p>
+        <div id="bnContainer" class="button-container"></div>
+    </main>
+
+    <script>
+        const ports = electronAPI.getPorts();
+        let portsArr = ports.PORTS;
+
+        for (let i = 0; i < portsArr.length; i++) {
+            let button = document.createElement('button');
+            button.innerText = `连接 ${portsArr[i]}`;
+            button.id = 'bn' + i;
+            button.addEventListener('click', () => {
+                electronAPI.sendConnectPort(portsArr[i]);
+                setTimeout(() => {
+                    const flag = electronAPI.isConnected();
+                    if (flag.flag) {
+                        alert('✅ 连接成功！');
+                    } else {
+                        alert('❌ 连接失败，请重试。');
+                    }
+                }, 800);
+            });
+            document.getElementById('bnContainer').appendChild(button);
+        }
+    </script>
+
+</body>
+</html>

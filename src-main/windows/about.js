@@ -12,7 +12,9 @@ class AboutWindow extends AbstractWindow {
     this.window.setMaximizable(false);
     this.window.setTitle(translate('about').replace('{APP_NAME}', APP_NAME));
 
-    this.ipc.on('get-info', (event) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('get-info', (event) => {
       event.returnValue = {
         version: packageJSON.version,
         dist: getDist(),

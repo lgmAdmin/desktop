@@ -24,7 +24,9 @@ class MigrateWindow extends AbstractWindow {
       this.resolveCallback = resolve;
     });
 
-    this.ipc.on('get-info', (event) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('get-info', (event) => {
       event.returnValue = {
         oldDataVersion,
         locale: getLocale(),
@@ -32,11 +34,11 @@ class MigrateWindow extends AbstractWindow {
       };
     });
 
-    this.ipc.handle('done', async () => {
+    ipc.handle('done', async () => {
       await this.done(true);
     });
 
-    this.ipc.handle('continue-anyways', async () => {
+    ipc.handle('continue-anyways', async () => {
       await this.done(false);
     });
 

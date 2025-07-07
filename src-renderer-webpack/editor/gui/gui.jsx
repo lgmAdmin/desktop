@@ -4,6 +4,14 @@ import GUI, {AppStateHOC} from 'scratch-gui';
 
 import ErrorContainerHOC from '../error/error-container-hoc.jsx';
 import DesktopHOC from './desktop-hoc.jsx';
+import SerialHOC from './serial-hoc.jsx';
+import BleHoc from './ble-hoc.jsx'
+import DownloadHOC from './download-hoc.jsx';
+import EspSendHOC from './esp-send-hoc.jsx';
+import SendWifiHOC from './send-wifi-hoc.jsx';
+import MasterHOC from './master-hoc.jsx';
+import ConnectHOC from './connect-hoc.jsx'
+import FirmwareHOC from './firmware-hoc.jsx'
 import CloudProviderHOC from './cloud-provider-hoc.jsx';
 import {showOpenFilePicker, showSaveFilePicker} from './filesystem-api.js';
 import './normalize.css';
@@ -13,7 +21,15 @@ const WrappedGUI = compose(
   ErrorContainerHOC,
   AppStateHOC,
   DesktopHOC,
-  CloudProviderHOC
+  SerialHOC,
+  BleHoc,
+  DownloadHOC,
+  EspSendHOC,
+  SendWifiHOC,
+  MasterHOC,
+  ConnectHOC,
+  CloudProviderHOC,
+  FirmwareHOC
 )(GUI);
 
 const GUIWithProps = () => (

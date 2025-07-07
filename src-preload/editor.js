@@ -14,6 +14,16 @@ contextBridge.exposeInMainWorld('EditorPreload', {
   openAddonSettings: (search) => ipcRenderer.invoke('open-addon-settings', search),
   openPackager: () => ipcRenderer.invoke('open-packager'),
   openDesktopSettings: () => ipcRenderer.invoke('open-desktop-settings'),
+  openSerialSettings: () => ipcRenderer.invoke('open-serial-settings'),
+  openBleSettings: () => ipcRenderer.invoke('open-ble-settings'),
+  openDownloadSettings: (code) => ipcRenderer.invoke('open-download-settings',code),
+  download: (code) => ipcRenderer.invoke('download',code),
+  SerialDownload: (code) => ipcRenderer.invoke('serial-download',code),
+  cancelload: () => ipcRenderer.invoke('cancelload'),
+  openEspSettings: (espTool) => ipcRenderer.invoke('open-esp-settings',espTool),  
+  openWifiSettings: () => ipcRenderer.invoke('open-wifi-settings'),  
+  openMasterWindow: () => ipcRenderer.invoke('open-master-window'),
+  openConnectWindow:() =>ipcRenderer.invoke('open-connect-window'),
   openPrivacy: () => ipcRenderer.invoke('open-privacy'),
   openAbout: () => ipcRenderer.invoke('open-about'),
   getPreferredMediaDevices: () => ipcRenderer.invoke('get-preferred-media-devices'),
@@ -21,7 +31,48 @@ contextBridge.exposeInMainWorld('EditorPreload', {
   setExportForPackager: (callback) => {
     exportForPackager = callback;
   },
-  setIsFullScreen: (isFullScreen) => ipcRenderer.invoke('set-is-full-screen', isFullScreen)
+  setIsFullScreen: (isFullScreen) => ipcRenderer.invoke('set-is-full-screen', isFullScreen),
+
+  sendImageData: (imagedata) => ipcRenderer.invoke('send-imagedata', imagedata),
+
+
+
+    // 浦东第一帅-----------------------------------------------
+   //连接相关
+   requestUSBPermission: () => ipcRenderer.invoke('usb-request-device'),
+   connectUSBDevice: (deviceInfo) => ipcRenderer.invoke('usb-connect-device', deviceInfo),
+   disconnectUSBDevice: () => ipcRenderer.invoke('usb-disconnect-device'),
+  //烧录原始固件
+   flashFirmware: () => ipcRenderer.invoke('usb-flash-firmware'),
+ 
+   flashHexFile: (hexData, boardId) => ipcRenderer.invoke('usb-flash-hex', { hexData, boardId }),
+   getStorageInfo: () => ipcRenderer.invoke('usb-get-storage-info'),
+   
+   // 添加USB设备事件监听
+   onUSBDeviceEvent: (callback) => {
+     ipcRenderer.on('usb-device-connected', (event, device) => callback('connected', device));
+     ipcRenderer.on('usb-device-disconnected', (event, device) => callback('disconnected', device));
+     ipcRenderer.on('usb-device-error', (event, error) => callback('error', null, error));
+     ipcRenderer.on('flash-progress', (event, progress) => callback('progress',null,progress));
+   },
+   enterReplMode: () => ipcRenderer.invoke('usb-enter-repl'),
+   exitReplMode: () => ipcRenderer.invoke('usb-exit-repl'),
+   sendCommandToDevice: (command) => ipcRenderer.invoke('usb-send-command', command),
+   
+   downloadCode: (code) => ipcRenderer.invoke('usb-download-flash',code),
+   // 添加REPL数据接收监听
+   onReplData: (callback) => {
+     ipcRenderer.on('repl-data-received', (event, data) => {
+       callback({
+         ...data,
+         isPrompt: data.text.includes('>>>') 
+       });
+     });
+   },
+   // 移除监听
+   offReplData: () => {
+     ipcRenderer.removeAllListeners('repl-data-received');
+   }
 });
 
 let exportForPackager = () => Promise.reject(new Error('exportForPackager missing'));
@@ -41,7 +92,7 @@ ipcRenderer.on('export-project-to-port', (e) => {
 window.addEventListener('message', (e) => {
   if (e.source === window) {
     const data = e.data;
-    if (data && typeof data.ipcStartWriteStream === 'string') {
+    if (data && typeof data.ipcStartWriteStream === 'number') {
       ipcRenderer.postMessage('start-write-stream', data.ipcStartWriteStream, e.ports);
     }
   }

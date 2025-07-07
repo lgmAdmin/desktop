@@ -90,14 +90,12 @@ class ProjectRunningWindow extends AbtractWindow {
       permission === 'clipboard-sanitized-write' ||
 
       // Wake Lock extension
-      permission === 'screen-wake-lock' ||
-
-      // Backpack, restore points want persistent storage
-      permission === 'persistent-storage'
+      permission === 'screen-wake-lock'
     );
   }
 
   onBeforeRequest (details, callback) {
+    // console.log('执行了')
     if (details.resourceType === 'cspReport' || details.resourceType === 'ping') {
       return callback({
         cancel: true
@@ -105,15 +103,18 @@ class ProjectRunningWindow extends AbtractWindow {
     }
 
     const parsed = new URL(details.url);
+    // console.log(details.url)
+    // console.log(parsed.origin)
 
     if (parsed.origin === 'https://cdn.assets.scratch.mit.edu' || parsed.origin === 'https://assets.scratch.mit.edu') {
+      console.log('--------------')
       const match = parsed.href.match(/[0-9a-f]{32}\.\w{3}/i);
       if (match) {
         const md5ext = match[0];
         return listLocalFilesCached().then((localLibraryFiles) => {
           if (localLibraryFiles.includes(md5ext)) {
             return callback({
-              redirectURL: `tw-library://./${md5ext}`
+              redirectURL: `tw-editor://./assets/${md5ext}`
             });
           }
           callback({});
@@ -123,8 +124,7 @@ class ProjectRunningWindow extends AbtractWindow {
 
     if (parsed.origin === 'https://extensions.turbowarp.org') {
       return callback({
-        // pathname always has a leading / already
-        redirectURL: `tw-extensions://.${parsed.pathname}`
+        redirectURL: `tw-extensions://./${parsed.pathname}`
       });
     }
 

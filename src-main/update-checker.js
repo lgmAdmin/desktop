@@ -21,6 +21,7 @@ const isUpdateCheckerAllowed = () => {
 };
 
 const checkForUpdates = async () => {
+  // console.log('$$$$$$$$$$$$$$$$$$$$$$$$')
   if (!isUpdateCheckerAllowed() || settings.updateChecker === 'never') {
     return;
   }

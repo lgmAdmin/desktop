@@ -16,11 +16,13 @@ class PackagerWindow extends AbstractWindow {
       event.preventDefault();
     });
 
-    this.ipc.on('is-mas', (event) => {
+    const ipc = this.window.webContents.ipc;
+
+    ipc.on('is-mas', (event) => {
       event.returnValue = !!process.mas;
     });
 
-    this.ipc.on('import-project-with-port', (event) => {
+    ipc.on('import-project-with-port', (event) => {
       const port = event.ports[0];
       if (this.editorWindow.window.isDestroyed()) {
         port.postMessage({
@@ -31,15 +33,15 @@ class PackagerWindow extends AbstractWindow {
       this.editorWindow.window.webContents.postMessage('export-project-to-port', null, [port]);
     });
 
-    this.ipc.on('alert', (event, message) => {
+    ipc.on('alert', (event, message) => {
       event.returnValue = prompts.alert(this.window, message);
     });
 
-    this.ipc.on('confirm', (event, message) => {
+    ipc.on('confirm', (event, message) => {
       event.returnValue = prompts.confirm(this.window, message);
     });
 
-    this.ipc.handle('check-drag-and-drop-path', (event, path) => {
+    ipc.handle('check-drag-and-drop-path', (event, path) => {
       FileAccessWindow.check(path);
     });
 

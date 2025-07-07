@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: black;
+        background-color: white;
+        accent-color: #ff4c4c;
+      }
+      main {
+        padding: 20px;
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 100vh;
+        border: 20px solid hsla(0, 100%, 65%, 1);
+      }
+      .title {
+        margin-top: 0;
+      }
+      label {
+        display: block;
+        margin: 0.5rem 0;
+      }
+      .label {
+        font-weight: bold;
+        margin-bottom: 0.25rem;
+      }
+      select {
+        width: 100%;
+        font: inherit;
+      }
+      .warning {
+        background-color: yellow;
+        color: black;
+        border: 1px solid black;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+
+        /* 外层容器 */
+      #bnContainer {
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        max-width: 500px;
+        margin: 30px auto;
+      }
+
+      /* 标题 */
+      h1 {
+        color: #ff4c4c;
+        font-size: 22px;
+        margin-bottom: 15px;
+      }
+
+      /* WiFi 列表 */
+      #wifi-list {
+        max-height: 250px; /* 设定最大高度 */
+        list-style: none;
+        padding: 0;
+        margin-bottom: 15px;
+      }
+
+      #wifi-list li {
+        background: white;
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        transition: background 0.3s, transform 0.2s;
+      }
+
+      #wifi-list li:hover {
+        background: #ffe5e5;
+        transform: scale(1.02);
+      }
+
+      /* 按钮样式 */
+      button {
+        display: inline-block;
+        padding: 10px 15px;
+        font-size: 16px;
+        color: white;
+        background-color: #ff4c4c;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.3s ease-in-out;
+        margin-top: 10px;
+      }
+
+      button:hover {
+        background-color: #e03e3e;
+        transform: scale(1.05);
+      }
+
+      /* 自定义输入框（弹窗） */
+      .input-dialog {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        display: none;
+        z-index: 1000;
+        width: 250px;
+        text-align: center;
+      }
+
+      .input-dialog input {
+        width: 90%;
+        padding: 8px;
+        margin: 10px 0;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        font-size: 14px;
+      }
+
+      .input-dialog input:focus {
+        outline: none;
+        border-color: #ff4c4c;
+        box-shadow: 0 0 5px rgba(255, 76, 76, 0.5);
+      }
+
+      .input-dialog button {
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      /* 遮罩层样式 */
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5); /* 半透明背景 */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+      z-index: 2000;
+      display: none; /* 默认隐藏 */
+    }
+
+    /* 旋转圆环 */
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 10px;
+    }
+
+    /* 旋转动画 */
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    </style>
+  </head>
+  <body>
+
+      <div id="bnContainer">
+        <!-- 加载遮罩层 -->
+        <div id="loading-overlay">
+          <div class="spinner"></div>
+          <p>正在连接 Wi-Fi...</p>
+        </div>
+
+        <h1 id="currentWifi"></h1>
+        <h1>可连接wifi</h1>
+        <ul id="wifi-list"></ul>
+      
+        <button id="disConnect">断开当前连接</button>
+
+        <!-- 自定义密码输入框 -->
+        <div id="password-dialog" class="input-dialog">
+          <!-- <input type="password" id="wifi-password" placeholder="Enter Wi-Fi password"> -->
+          <button id="submit-password">连接</button>
+
+          <input id="name" placeholder="请输入修改wifi名">
+          <button id="rename">改名</button>
+          <button id="cancel">取消</button>
+        </div>
+
+
+
+      </div>
+      <script>
+
+        window.addEventListener('offline',()=>{
+          console.log('网络断开')
+        })
+
+        
+       // 加载并显示 Wi-Fi 网络列表
+        async function loadWifiList() {
+          console.log(window.sendWifi.currentWifi())
+          document.getElementById('currentWifi').innerText=window.sendWifi.currentWifi().wifi
+          try {
+            const networks = await window.sendWifi.scanWifi();
+            const wifiListElement = document.getElementById('wifi-list');
+            wifiListElement.innerHTML = ''; // 清空列表
+
+            networks.forEach((network,index) => {
+              if(network.ssid.startsWith('ICR')){
+                const li = document.createElement('li');
+                li.textContent = network.ssid;
+                li.addEventListener('click', () => connectToWifi(network.ssid));
+
+
+
+                wifiListElement.appendChild(li);
+              }
+              
+            });
+          } catch (error) {
+            console.error('Error scanning Wi-Fi networks:', error);
+          }
+        }
+
+
+        const disConnect = document.getElementById('disConnect')
+        disConnect.onclick= async ()=>{
+          console.log('aaaaaa')
+          await window.sendWifi.disConn()
+        }
+
+        // 连接到选定的 Wi-Fi 网络
+        async function connectToWifi(ssid) {
+
+           // 显示自定义输入框
+           const passwordDialog = document.getElementById('password-dialog');
+          const submitButton = document.getElementById('submit-password');
+          const name = document.getElementById('name')
+          
+          name.value=''
+          const rename = document.getElementById('rename')
+          const cancel = document.getElementById('cancel')
+          passwordDialog.style.display = 'block';
+
+          // rename.onclick =  async ()=>{
+          //   if(!name.value){
+          //     alert('请输入修改后的名字')
+          //     return
+          //   }else{
+          //     const response = await window.sendWifi.changeName('ICRobot_'+name.value)
+          //     console.log(response)
+          //     if(response){
+          //       alert('改名成功，如需使用新名称请重启设备')
+                
+          //       passwordDialog.style.display = 'none';
+          //     }
+          //   }
+          // }
+
+
+          // submitButton.onclick = async () => {
+          //   // const response = await window.sendWifi.sendData('whatssid');
+
+
+          //   const password = '123'
+          //   document.getElementById('loading-overlay').style.display='flex'
+          //   try {
+          //     let result=await window.sendWifi.connectWifi(ssid, password);
+          //     console.log(result)
+          //     alert(`成功连接 ${ssid}`);
+              
+          //     passwordDialog.style.display = 'none'; // 隐藏密码框
+          //     document.getElementById('loading-overlay').style.display='none'
+          //     await window.sendWifi.isClose(true);
+          //   } catch (error) {
+          //     passwordDialog.style.display = 'none'; // 隐藏密码框
+          //     document.getElementById('loading-overlay').style.display='none'
+          //     alert(`连接失败 ${ssid}: ${error.message}`);
+          //   }
+
+          // }
+          function containsChinese(text) {
+              return /[\u4e00-\u9fa5]/.test(text);
+          }
+          
+          const response = await window.sendWifi.sendData('whatssid');
+          console.log(response)
+          if(ssid==response){
+            submitButton.style.display='none'
+            name.style.display='block'
+            rename.style.display='block'
+            rename.onclick =  async ()=>{
+              if(!name.value){
+                alert('请输入修改后的名字')
+                return
+              }else if(containsChinese(name.value)){
+                alert('请勿输入中文')
+                return
+              }else{
+                const response = await window.sendWifi.changeName('ICRobot_'+name.value)
+                console.log(response)
+                if(response){
+                  alert('改名成功，如需使用新名称请重启设备')
+                  
+                  passwordDialog.style.display = 'none';
+                }
+              }
+            }
+          }else{
+            submitButton.style.display='block'
+            name.style.display='none'
+            rename.style.display='none'
+
+            submitButton.onclick = async () => {
+              // const response = await window.sendWifi.sendData('whatssid');
+
+
+              const password = '123'
+              document.getElementById('loading-overlay').style.display='flex'
+              try {
+                let result=await window.sendWifi.connectWifi(ssid, password);
+                console.log(result)
+                alert(`成功连接 ${ssid}`);
+                
+                passwordDialog.style.display = 'none'; // 隐藏密码框
+                document.getElementById('loading-overlay').style.display='none'
+                await window.sendWifi.isClose(true);
+              } catch (error) {
+                passwordDialog.style.display = 'none'; // 隐藏密码框
+                document.getElementById('loading-overlay').style.display='none'
+                alert(`连接失败 ${ssid}: ${error.message}`);
+              }
+
+            }
+          }
+
+
+          cancel.onclick = async ()=>{
+            passwordDialog.style.display = 'none';
+          }
+          
+
+          // const password = prompt(`Enter the password for ${ssid}:`);
+
+          
+        }
+
+        // 加载 Wi-Fi 网络列表
+        loadWifiList();
+        setInterval(()=>{
+          loadWifiList();
+        },1000)
+      </script>
+
+    <!-- </main> -->
+  </body>
+</html>
